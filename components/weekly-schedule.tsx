@@ -140,6 +140,9 @@ export default function WeeklySchedule({ pollId }: WeeklyScheduleProps) {
         // Update local state
         setVotes((prevVotes) => {
           const updatedVotes = { ...prevVotes }
+          if (!updatedVotes[key]) {
+            updatedVotes[key] = { userVotes: new Set(), totalVotes: 0 }
+          }
           updatedVotes[key].userVotes.add(user.id)
           updatedVotes[key].totalVotes += 1
           return updatedVotes
