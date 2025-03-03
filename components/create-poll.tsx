@@ -61,7 +61,7 @@ export default function CreatePoll({ pollType, onPollCreated }: CreatePollProps)
           .insert({
             name: pollName.trim(),
             description: pollDescription.trim(),
-            user_id: user.id,
+            ownerUser: user.id,
             days: selectedDays.join(","),
           })
           .select())
@@ -71,7 +71,7 @@ export default function CreatePoll({ pollType, onPollCreated }: CreatePollProps)
           .insert({
             name: pollName.trim(),
             description: pollDescription.trim(),
-            user_id: user.id,
+            ownerUser: user.id,
             startDate,
             endDate,
           })

@@ -70,7 +70,7 @@ export default function CalendarPoll({ pollId }: CalendarPollProps) {
       console.log(`CalendarPollVotes fetched: ${voteData.length} votes`)
 
       const newVotes: Record<string, VoteData> = {}
-      voteData.forEach((vote: { date: any; userID: string }) => {
+      voteData.forEach((vote) => {
         const key = vote.date
         if (!newVotes[key]) {
           newVotes[key] = { userVotes: new Set(), totalVotes: 0 }

@@ -83,7 +83,7 @@ export default function WeeklySchedule({ pollId }: WeeklyScheduleProps) {
         })
       })
 
-      voteData.forEach((vote: any) => {
+      voteData.forEach((vote) => {
         const key = `${vote.day}-${vote.hour}`
         if (newVotes[key]) {
           newVotes[key].userVotes.add(vote.userID)
