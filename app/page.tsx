@@ -5,13 +5,14 @@ import { useAuth } from "../components/auth-provider"
 import PollSelector from "../components/poll-selector"
 import WeeklySchedule from "../components/weekly-schedule"
 import RegistrationForm from "../components/registration-form"
+import CalendarPoll from "../components/calendar-poll"
 
 export default function SchedulePoolingPage() {
-  const [selectedPollId, setSelectedPollId] = useState<string | null>(null)
+  const [selectedPoll, setSelectedPoll] = useState<{ id: string; type: "schedule" | "calendar" } | null>(null)
   const { user } = useAuth()
 
-  const handleSelectPoll = (pollId: string) => {
-    setSelectedPollId(pollId)
+  const handleSelectPoll = (pollId: string, pollType: "schedule" | "calendar") => {
+    setSelectedPoll({ id: pollId, type: pollType })
   }
 
   if (!user) {
@@ -39,9 +40,13 @@ export default function SchedulePoolingPage() {
       <div className="mb-6">
         <PollSelector onSelectPoll={handleSelectPoll} />
       </div>
-      {selectedPollId && (
+      {selectedPoll && (
         <div className="bg-white shadow-md rounded-lg overflow-hidden mt-6 p-4">
-          <WeeklySchedule key={selectedPollId} pollId={selectedPollId} />
+          {selectedPoll.type === "schedule" ? (
+            <WeeklySchedule key={selectedPoll.id} pollId={selectedPoll.id} />
+          ) : (
+            <CalendarPoll key={selectedPoll.id} pollId={selectedPoll.id} />
+          )}
         </div>
       )}
     </main>

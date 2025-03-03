@@ -10,15 +10,16 @@ interface Poll {
   id: string
   name: string
   description?: string
+  type: "schedule" | "calendar"
 }
 
 interface PollSelectorProps {
-  onSelectPoll: (pollId: string) => void
+  onSelectPoll: (pollId: string, pollType: "schedule" | "calendar") => void
 }
 
 export default function PollSelector({ onSelectPoll }: PollSelectorProps) {
   const [polls, setPolls] = useState<Poll[]>([])
-  const [selectedPollId, setSelectedPollId] = useState<string | null>(null)
+  const [selectedPoll, setSelectedPoll] = useState<Poll | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const { user } = useAuth()
@@ -35,34 +36,42 @@ export default function PollSelector({ onSelectPoll }: PollSelectorProps) {
     try {
       console.log("Fetching polls...")
       const supabase = createSupabaseClient()
-      const { data, error } = await supabase.from("SchedulePoll").select("id, name, description").order("name")
 
-      if (error) {
-        console.error("Error fetching polls:", error)
-        setError("Failed to fetch polls. Please check the console for more details.")
+      const [scheduleResult, calendarResult] = await Promise.all([
+        supabase.from("SchedulePoll").select("id, name, description"),
+        supabase.from("CalendarPoll").select("id, name, description"),
+      ])
+
+      if (scheduleResult.error) throw scheduleResult.error
+      if (calendarResult.error) throw calendarResult.error
+
+      const schedulePolls = (scheduleResult.data || []).map((poll) => ({ ...poll, type: "schedule" as const }))
+      const calendarPolls = (calendarResult.data || []).map((poll) => ({ ...poll, type: "calendar" as const }))
+
+      const allPolls = [...schedulePolls, ...calendarPolls].sort((a, b) => a.name.localeCompare(b.name))
+
+      console.log("Fetched polls:", allPolls)
+      if (allPolls.length > 0) {
+        setPolls(allPolls)
       } else {
-        console.log("Fetched polls:", data)
-        if (data && data.length > 0) {
-          setPolls(data)
-        } else {
-          setError("No polls found. Make sure you have created some polls in the SchedulePoll table.")
-        }
+        setError("No polls found. Make sure you have created some polls in the SchedulePoll or CalendarPoll tables.")
       }
     } catch (err) {
-      console.error("Unexpected error:", err)
-      setError("An unexpected error occurred. Please check the console for more details.")
+      console.error("Error fetching polls:", err)
+      setError("Failed to fetch polls. Please check the console for more details.")
     } finally {
       setIsLoading(false)
     }
   }
 
   const handleSelectPoll = (pollId: string) => {
-    setSelectedPollId(pollId)
+    const selected = polls.find((poll) => poll.id === pollId)
+    setSelectedPoll(selected || null)
   }
 
   const handleViewPoll = () => {
-    if (selectedPollId) {
-      onSelectPoll(selectedPollId)
+    if (selectedPoll) {
+      onSelectPoll(selectedPoll.id, selectedPoll.type)
     }
   }
 
@@ -80,19 +89,19 @@ export default function PollSelector({ onSelectPoll }: PollSelectorProps) {
 
   return (
     <div className="flex items-center space-x-4">
-      <Select onValueChange={handleSelectPoll} value={selectedPollId || undefined}>
+      <Select onValueChange={handleSelectPoll} value={selectedPoll?.id}>
         <SelectTrigger className="w-[280px]">
           <SelectValue placeholder="Select a poll" />
         </SelectTrigger>
         <SelectContent>
           {polls.map((poll) => (
             <SelectItem key={poll.id} value={poll.id}>
-              {poll.name}
+              {poll.name} ({poll.type})
             </SelectItem>
           ))}
         </SelectContent>
       </Select>
-      <Button onClick={handleViewPoll} disabled={!selectedPollId}>
+      <Button onClick={handleViewPoll} disabled={!selectedPoll}>
         View
       </Button>
     </div>
