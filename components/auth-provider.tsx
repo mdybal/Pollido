@@ -19,13 +19,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
 
   useEffect(() => {
-    const { data: authListener } = createSupabaseClient().auth.onAuthStateChange((event, session) => {
+    const { data: authListener } = createSupabaseClient().auth.onAuthStateChange((event:any, session:any) => {
       setUser(session?.user ?? null)
     })
 
     createSupabaseClient()
       .auth.getSession()
-      .then(({ data: { session } }) => {
+      .then(({ data: {session} }) => {
         setUser(session?.user ?? null)
       })
 

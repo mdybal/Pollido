@@ -5,14 +5,29 @@ import { useAuth } from "../components/auth-provider"
 import PollSelector from "../components/poll-selector"
 import WeeklySchedule from "../components/weekly-schedule"
 import RegistrationForm from "../components/registration-form"
-import CalendarPoll from "../components/calendar-poll" // We'll create this component next
+import CalendarPoll from "../components/calendar-poll"
+import { Button } from "@/components/ui/button"
+import CreatePollModal from "../components/create-poll-modal"
 
 export default function SchedulePoolingPage() {
   const [selectedPoll, setSelectedPoll] = useState<{ id: string; type: "schedule" | "calendar" } | null>(null)
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [pollType, setPollType] = useState<"schedule" | "calendar">("schedule")
   const { user } = useAuth()
 
   const handleSelectPoll = (pollId: string, pollType: "schedule" | "calendar") => {
     setSelectedPoll({ id: pollId, type: pollType })
+  }
+
+  const handleCreatePoll = (type: "schedule" | "calendar") => {
+    setPollType(type)
+    setIsModalOpen(true)
+  }
+
+  const handlePollCreated = () => {
+    setIsModalOpen(false)
+    // Refresh the poll list
+    // You might want to implement a function to refresh the poll list in PollSelector
   }
 
   if (!user) {
@@ -37,6 +52,10 @@ export default function SchedulePoolingPage() {
   return (
     <main className="container mx-auto p-4">
       <h1 className="text-3xl font-bold mb-4">Schedule Polling</h1>
+      <div className="mb-6 flex space-x-4">
+        <Button onClick={() => handleCreatePoll("schedule")}>Create Weekly Poll</Button>
+        <Button onClick={() => handleCreatePoll("calendar")}>Create Calendar Poll</Button>
+      </div>
       <div className="mb-6">
         <PollSelector onSelectPoll={handleSelectPoll} />
       </div>
@@ -49,6 +68,12 @@ export default function SchedulePoolingPage() {
           )}
         </div>
       )}
+      <CreatePollModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        pollType={pollType}
+        onPollCreated={handlePollCreated}
+      />
     </main>
   )
 }

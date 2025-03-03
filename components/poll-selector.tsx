@@ -45,8 +45,8 @@ export default function PollSelector({ onSelectPoll }: PollSelectorProps) {
       if (scheduleResult.error) throw scheduleResult.error
       if (calendarResult.error) throw calendarResult.error
 
-      const schedulePolls = (scheduleResult.data || []).map((poll) => ({ ...poll, type: "schedule" as const }))
-      const calendarPolls = (calendarResult.data || []).map((poll) => ({ ...poll, type: "calendar" as const }))
+      const schedulePolls = (scheduleResult.data || []).map((poll:any) => ({ ...poll, type: "schedule" as const }))
+      const calendarPolls = (calendarResult.data || []).map((poll:any) => ({ ...poll, type: "calendar" as const }))
 
       const allPolls = [...schedulePolls, ...calendarPolls].sort((a, b) => a.name.localeCompare(b.name))
 
