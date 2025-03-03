@@ -10,6 +10,7 @@ type AuthContextType = {
   user: User | null
   signIn: (email: string, password: string) => Promise<void>
   signOut: () => Promise<void>
+  register: (email: string, password: string) => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -43,7 +44,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (error) throw error
   }
 
-  return <AuthContext.Provider value={{ user, signIn, signOut }}>{children}</AuthContext.Provider>
+  const register = async (email: string, password: string) => {
+    const { error } = await createSupabaseClient().auth.signUp({ email, password })
+    if (error) throw error
+  }
+
+  return <AuthContext.Provider value={{ user, signIn, signOut, register }}>{children}</AuthContext.Provider>
 }
 
 export function useAuth() {

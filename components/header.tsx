@@ -8,6 +8,7 @@ import { useAuth } from "./auth-provider"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { createSupabaseClient } from "../utils/supabase"
+// import Profile from "@/components/profile";
 
 export default function Header() {
   const { user, signIn, signOut } = useAuth()
