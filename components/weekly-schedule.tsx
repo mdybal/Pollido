@@ -5,6 +5,7 @@ import DayColumn from "./day-column"
 import { createSupabaseClient } from "../utils/supabase"
 import { useAuth } from "./auth-provider"
 
+const daysOfWeek = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 const workingHours = Array.from({ length: 22 }, (_, i) => {
   const hour = Math.floor(i / 2) + 7
   const minute = i % 2 === 0 ? "00" : "30"
@@ -25,7 +26,6 @@ export default function WeeklySchedule({ pollId }: WeeklyScheduleProps) {
   const [pollName, setPollName] = useState<string>("")
   const [pollDescription, setPollDescription] = useState<string>("")
   const [pollDays, setPollDays] = useState<string[]>([])
-  const [uniqueVoters, setUniqueVoters] = useState<number>(0)
   const [error, setError] = useState<string | null>(null)
   const { user } = useAuth()
 
@@ -42,7 +42,7 @@ export default function WeeklySchedule({ pollId }: WeeklyScheduleProps) {
 
       console.log(`Fetching poll data for pollId: ${pollId}`)
 
-      // Fetch poll name, description, and days
+      // Fetch poll name and description
       const { data: pollData, error: pollError } = await supabase
         .from("SchedulePoll")
         .select("name, description, days")
@@ -65,7 +65,7 @@ export default function WeeklySchedule({ pollId }: WeeklyScheduleProps) {
       const { data: voteData, error: voteError } = await supabase
         .from("SchedulePollVote")
         .select("*")
-        .eq("schedulePollId", pollId)
+        .eq("pollID", pollId)
 
       if (voteError) {
         console.error("Error fetching votes:", voteError)
@@ -76,20 +76,22 @@ export default function WeeklySchedule({ pollId }: WeeklyScheduleProps) {
       console.log(`SchedulePollVotes fetched: ${voteData.length} votes`)
 
       const newVotes: Record<string, VoteData> = {}
-      const uniqueUserIds = new Set<string>()
+      daysOfWeek.forEach((day) => {
+        workingHours.forEach((hour) => {
+          const key = `${day}-${hour}`
+          newVotes[key] = { userVotes: new Set(), totalVotes: 0 }
+        })
+      })
 
       voteData.forEach((vote) => {
         const key = `${vote.day}-${vote.hour}`
-        if (!newVotes[key]) {
-          newVotes[key] = { userVotes: new Set(), totalVotes: 0 }
+        if (newVotes[key]) {
+          newVotes[key].userVotes.add(vote.userID)
+          newVotes[key].totalVotes += 1
         }
-        newVotes[key].userVotes.add(vote.userID)
-        newVotes[key].totalVotes += 1
-        uniqueUserIds.add(vote.userID)
       })
 
       setVotes(newVotes)
-      setUniqueVoters(uniqueUserIds.size)
     } catch (err) {
       console.error("Unexpected error:", err)
       setError("An unexpected error occurred. Please check the console for more details.")
@@ -111,7 +113,7 @@ export default function WeeklySchedule({ pollId }: WeeklyScheduleProps) {
         const { error } = await supabase
           .from("SchedulePollVote")
           .delete()
-          .match({ schedulePollId: pollId, day, hour, userID: user.id })
+          .match({ pollID: pollId, day, hour, userID: user.id })
 
         if (error) {
           console.error("Error removing vote:", error)
@@ -129,7 +131,7 @@ export default function WeeklySchedule({ pollId }: WeeklyScheduleProps) {
       } else {
         const { error } = await supabase
           .from("SchedulePollVote")
-          .insert({ schedulePollId: pollId, day, hour, userID: user.id })
+          .insert({ pollID: pollId, day, hour, userID: user.id })
 
         if (error) {
           console.error("Error adding vote:", error)
@@ -140,9 +142,6 @@ export default function WeeklySchedule({ pollId }: WeeklyScheduleProps) {
         // Update local state
         setVotes((prevVotes) => {
           const updatedVotes = { ...prevVotes }
-          if (!updatedVotes[key]) {
-            updatedVotes[key] = { userVotes: new Set(), totalVotes: 0 }
-          }
           updatedVotes[key].userVotes.add(user.id)
           updatedVotes[key].totalVotes += 1
           return updatedVotes
@@ -150,13 +149,6 @@ export default function WeeklySchedule({ pollId }: WeeklyScheduleProps) {
       }
 
       console.log(`Vote ${hasVoted ? "removed" : "added"} for ${day} ${hour}`)
-
-      // Recalculate unique voters
-      const allUserIds = new Set<string>()
-      Object.values(votes).forEach((voteData) => {
-        voteData.userVotes.forEach((userId) => allUserIds.add(userId))
-      })
-      setUniqueVoters(allUserIds.size)
     } catch (err) {
       console.error("Unexpected error:", err)
       setError("An unexpected error occurred. Please try again.")
@@ -184,10 +176,7 @@ export default function WeeklySchedule({ pollId }: WeeklyScheduleProps) {
 
   return (
     <div>
-      <div className="flex items-baseline mb-2">
-        <h2 className="text-2xl font-bold">{pollName}</h2>
-        <span className="ml-2 text-sm text-gray-500">Number of unique votes: {uniqueVoters}</span>
-      </div>
+      <h2 className="text-2xl font-bold mb-2">{pollName}</h2>
       {pollDescription && <p className="text-gray-600 mb-4">{pollDescription}</p>}
       <div className="overflow-x-auto">
         <div className="flex min-w-max">

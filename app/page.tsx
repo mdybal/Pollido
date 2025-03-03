@@ -5,7 +5,7 @@ import { useAuth } from "../components/auth-provider"
 import PollSelector from "../components/poll-selector"
 import WeeklySchedule from "../components/weekly-schedule"
 import RegistrationForm from "../components/registration-form"
-import CalendarPoll from "../components/calendar-poll"
+import CalendarPoll from "../components/calendar-poll" // We'll create this component next
 
 export default function SchedulePoolingPage() {
   const [selectedPoll, setSelectedPoll] = useState<{ id: string; type: "schedule" | "calendar" } | null>(null)

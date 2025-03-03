@@ -5,6 +5,7 @@ import { createSupabaseClient } from "../utils/supabase"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useAuth } from "./auth-provider"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 interface CreatePollProps {
   onPollCreated: () => void
@@ -12,12 +13,12 @@ interface CreatePollProps {
 
 export default function CreatePoll({ onPollCreated }: CreatePollProps) {
   const [pollName, setPollName] = useState("")
-  const [pollDays, setPollDays] = useState<string[]>([])
+  const [pollType, setPollType] = useState<"schedule" | "calendar">("schedule")
+  const [startDate, setStartDate] = useState("")
+  const [endDate, setEndDate] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const { user } = useAuth()
-
-  const allDays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
   const handleCreatePoll = async () => {
     if (!user) {
@@ -30,8 +31,8 @@ export default function CreatePoll({ onPollCreated }: CreatePollProps) {
       return
     }
 
-    if (pollDays.length === 0) {
-      setError("Please select at least one day for the poll")
+    if (pollType === "calendar" && (!startDate || !endDate)) {
+      setError("Please enter both start and end dates for calendar poll")
       return
     }
 
@@ -41,14 +42,19 @@ export default function CreatePoll({ onPollCreated }: CreatePollProps) {
     try {
       console.log("Creating poll:", pollName)
       const supabase = createSupabaseClient()
-      const { data, error } = await supabase
-        .from("SchedulePoll")
-        .insert({
-          name: pollName.trim(),
-          user_id: user.id,
-          days: pollDays.join(","),
-        })
-        .select()
+      let data, error
+
+      if (pollType === "schedule") {
+        ;({ data, error } = await supabase
+          .from("SchedulePoll")
+          .insert({ name: pollName.trim(), user_id: user.id })
+          .select())
+      } else {
+        ;({ data, error } = await supabase
+          .from("CalendarPoll")
+          .insert({ name: pollName.trim(), user_id: user.id, startDate, endDate })
+          .select())
+      }
 
       if (error) {
         console.error("Error creating poll:", error)
@@ -57,7 +63,8 @@ export default function CreatePoll({ onPollCreated }: CreatePollProps) {
         console.log("Created poll:", data)
         setSuccess("Poll created successfully!")
         setPollName("")
-        setPollDays([])
+        setStartDate("")
+        setEndDate("")
         onPollCreated()
       }
     } catch (err) {
@@ -67,33 +74,35 @@ export default function CreatePoll({ onPollCreated }: CreatePollProps) {
   }
 
   return (
-    <div className="mt-4">
+    <div className="mt-4 space-y-4">
       <h2 className="text-xl font-semibold mb-2">Create New Poll</h2>
-      <div className="space-y-4">
-        <div>
-          <Input
-            type="text"
-            value={pollName}
-            onChange={(e) => setPollName(e.target.value)}
-            placeholder="Enter poll name"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Select days for the poll:</label>
-          <div className="flex flex-wrap gap-2">
-            {allDays.map((day) => (
-              <Button
-                key={day}
-                onClick={() =>
-                  setPollDays((prev) => (prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]))
-                }
-                variant={pollDays.includes(day) ? "default" : "outline"}
-              >
-                {day}
-              </Button>
-            ))}
-          </div>
-        </div>
+      <div className="space-y-2">
+        <Input
+          type="text"
+          value={pollName}
+          onChange={(e) => setPollName(e.target.value)}
+          placeholder="Enter poll name"
+        />
+        <Select onValueChange={(value: "schedule" | "calendar") => setPollType(value)} value={pollType}>
+          <SelectTrigger>
+            <SelectValue placeholder="Select poll type" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="schedule">Schedule Poll</SelectItem>
+            <SelectItem value="calendar">Calendar Poll</SelectItem>
+          </SelectContent>
+        </Select>
+        {pollType === "calendar" && (
+          <>
+            <Input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              placeholder="Start Date"
+            />
+            <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} placeholder="End Date" />
+          </>
+        )}
         <Button onClick={handleCreatePoll}>Create Poll</Button>
       </div>
       {error && <div className="text-red-500 mt-2">{error}</div>}
