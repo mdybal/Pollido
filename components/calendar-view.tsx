@@ -10,8 +10,15 @@ import {
   isSameMonth,
   isSameDay,
   isWithinInterval,
-  eachWeekOfInterval,
+  eachDayOfInterval,
+  startOfMonth,
+  endOfMonth,
+  isBefore,
+  isAfter,
+  max,
+  min,
 } from "date-fns"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 interface CalendarViewProps {
   startDate: Date
@@ -19,32 +26,20 @@ interface CalendarViewProps {
   votes: Record<string, { userVotes: Set<string>; totalVotes: number }>
   onVote: (date: Date) => void
   userId: string
+  userEmails: Record<string, string>
 }
 
-export default function CalendarView({ startDate, endDate, votes, onVote, userId }: CalendarViewProps) {
+export default function CalendarView({ startDate, endDate, votes, onVote, userId, userEmails }: CalendarViewProps) {
   const [currentMonth, setCurrentMonth] = useState(startDate)
 
-  const weeks = useMemo(() => {
-    return eachWeekOfInterval(
-      { start: startDate, end: endDate },
-      { weekStartsOn: 1 }, // Start weeks on Monday
-    )
-  }, [startDate, endDate])
-
   const calendarDays = useMemo(() => {
-    return weeks.map((week) => {
-      let day = startOfWeek(week, { weekStartsOn: 1 }) // Start from Monday
-      const end = endOfWeek(week, { weekStartsOn: 1 }) // End on Sunday
-      const weekDays = []
+    const monthStart = startOfMonth(currentMonth)
+    const monthEnd = endOfMonth(currentMonth)
+    const startDay = startOfWeek(monthStart, { weekStartsOn: 1 })
+    const endDay = endOfWeek(monthEnd, { weekStartsOn: 1 })
 
-      while (day <= end) {
-        weekDays.push(day)
-        day = addDays(day, 1)
-      }
-
-      return weekDays
-    })
-  }, [weeks])
+    return eachDayOfInterval({ start: startDay, end: endDay })
+  }, [currentMonth])
 
   const topThreeVotes = useMemo(() => {
     const sortedVotes = Object.entries(votes)
@@ -75,19 +70,26 @@ export default function CalendarView({ startDate, endDate, votes, onVote, userId
   }
 
   const handlePreviousMonth = () => {
-    setCurrentMonth((prevMonth) => addDays(prevMonth, -30)) // Approximate previous month
+    setCurrentMonth((prevMonth) => max([startOfMonth(addDays(prevMonth, -1)), startOfMonth(startDate)]))
   }
 
   const handleNextMonth = () => {
-    setCurrentMonth((prevMonth) => addDays(prevMonth, 30)) // Approximate next month
+    setCurrentMonth((prevMonth) => min([startOfMonth(addDays(endOfMonth(prevMonth), 1)), startOfMonth(endDate)]))
   }
+
+  const isPreviousMonthDisabled = isBefore(startOfMonth(currentMonth), startOfMonth(startDate))
+  const isNextMonthDisabled = isAfter(endOfMonth(currentMonth), endOfMonth(endDate))
 
   return (
     <div className="calendar-view">
       <div className="flex justify-between items-center mb-4">
-        <Button onClick={handlePreviousMonth}>&lt; Previous</Button>
+        <Button onClick={handlePreviousMonth} disabled={isPreviousMonthDisabled}>
+          &lt; Previous
+        </Button>
         <h2 className="text-xl font-bold">{format(currentMonth, "MMMM yyyy")}</h2>
-        <Button onClick={handleNextMonth}>Next &gt;</Button>
+        <Button onClick={handleNextMonth} disabled={isNextMonthDisabled}>
+          Next &gt;
+        </Button>
       </div>
       <div className="grid grid-cols-7 gap-1 mb-2">
         {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => (
@@ -96,26 +98,43 @@ export default function CalendarView({ startDate, endDate, votes, onVote, userId
           </div>
         ))}
       </div>
-      {calendarDays.map((week, weekIndex) => (
-        <div key={weekIndex} className="grid grid-cols-7 gap-1 mb-1">
-          {week.map((day, dayIndex) => {
-            const isGreyedOut = day < startDate || day > endDate
+      <TooltipProvider>
+        <div className="grid grid-cols-7 gap-1">
+          {calendarDays.map((day, index) => {
+            const isCurrentMonth = isSameMonth(day, currentMonth)
+            const isWithinPollRange = isWithinInterval(day, { start: startDate, end: endDate })
             const key = format(day, "yyyy-MM-dd")
             const voteData = votes[key] || { userVotes: new Set(), totalVotes: 0 }
             const hasVoted = voteData.userVotes.has(userId)
+            const voterEmails = Array.from(voteData.userVotes)
+              .map((id) => userEmails[id])
+              .filter(Boolean)
 
             return (
               <div
-                key={dayIndex}
+                key={index}
                 className={`p-2 border ${
-                  isGreyedOut ? "bg-gray-200" : getBackgroundColor(day)
-                } ${!isSameMonth(day, currentMonth) ? "text-gray-400" : ""}`}
+                  isCurrentMonth ? (isWithinPollRange ? getBackgroundColor(day) : "bg-gray-100") : "bg-gray-200"
+                }`}
               >
                 <div className="flex flex-col h-full">
-                  <span className={`${isSameDay(day, new Date()) ? "font-bold" : ""} text-sm`}>{format(day, "d")}</span>
-                  {!isGreyedOut && isWithinInterval(day, { start: startDate, end: endDate }) && (
+                  <span
+                    className={`${isSameDay(day, new Date()) ? "font-bold" : ""} ${
+                      isCurrentMonth ? "text-gray-900" : "text-gray-400"
+                    } text-sm`}
+                  >
+                    {format(day, "d")}
+                  </span>
+                  {isWithinPollRange && isCurrentMonth && (
                     <div className="flex items-center justify-between mt-auto">
-                      <span className="text-xs font-semibold">{voteData.totalVotes}</span>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="text-xs font-semibold cursor-help">{voteData.totalVotes}</span>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Voters: {voterEmails.join(", ")}</p>
+                        </TooltipContent>
+                      </Tooltip>
                       <Button
                         variant={hasVoted ? "destructive" : "default"}
                         size="sm"
@@ -132,7 +151,7 @@ export default function CalendarView({ startDate, endDate, votes, onVote, userId
             )
           })}
         </div>
-      ))}
+      </TooltipProvider>
     </div>
   )
 }

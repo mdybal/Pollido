@@ -4,6 +4,10 @@ import { useState, useEffect, useMemo } from "react"
 import DayColumn from "./day-column"
 import { createSupabaseClient } from "../utils/supabase"
 import { useAuth } from "./auth-provider"
+import { Settings } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import PollSettings from "./poll-settings"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 const daysOfWeek = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 const workingHours = Array.from({ length: 22 }, (_, i) => {
@@ -14,6 +18,7 @@ const workingHours = Array.from({ length: 22 }, (_, i) => {
 
 interface WeeklyScheduleProps {
   pollId: string
+  onPollDeleted: () => void
 }
 
 interface VoteData {
@@ -21,17 +26,22 @@ interface VoteData {
   totalVotes: number
 }
 
-export default function WeeklySchedule({ pollId }: WeeklyScheduleProps) {
+export default function WeeklySchedule({ pollId, onPollDeleted }: WeeklyScheduleProps) {
   const [votes, setVotes] = useState<Record<string, VoteData>>({})
   const [pollName, setPollName] = useState<string>("")
   const [pollDescription, setPollDescription] = useState<string>("")
   const [pollDays, setPollDays] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [isOwner, setIsOwner] = useState(false)
+  const [pollStatus, setPollStatus] = useState<string>("Open")
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const { user } = useAuth()
+  const [userEmails, setUserEmails] = useState<Record<string, string>>({})
 
   useEffect(() => {
     if (user) {
       fetchPollData()
+      fetchUserEmails()
     }
   }, [user])
 
@@ -42,10 +52,10 @@ export default function WeeklySchedule({ pollId }: WeeklyScheduleProps) {
 
       console.log(`Fetching poll data for pollId: ${pollId}`)
 
-      // Fetch poll name and description
+      // Fetch poll name, description, and owner
       const { data: pollData, error: pollError } = await supabase
         .from("SchedulePoll")
-        .select("name, description, days")
+        .select("name, description, days, ownerUser, status")
         .eq("id", pollId)
         .single()
 
@@ -59,6 +69,8 @@ export default function WeeklySchedule({ pollId }: WeeklyScheduleProps) {
       setPollName(pollData.name)
       setPollDescription(pollData.description || "")
       setPollDays(pollData.days ? pollData.days.split(",").map((day: string) => day.trim()) : [])
+      setIsOwner(pollData.ownerUser === user.id)
+      setPollStatus(pollData.status)
 
       // Fetch votes
       console.log(`Fetching SchedulePollVotes for pollId: ${pollId}`)
@@ -98,6 +110,23 @@ export default function WeeklySchedule({ pollId }: WeeklyScheduleProps) {
     }
   }
 
+  const fetchUserEmails = async () => {
+    try {
+      const supabase = createSupabaseClient()
+      const { data, error } = await supabase.from("PublicUserProfile").select("uid, email")
+
+      if (error) throw error
+
+      const emailMap: Record<string, string> = {}
+      data.forEach((user) => {
+        emailMap[user.uid] = user.email
+      })
+      setUserEmails(emailMap)
+    } catch (err) {
+      console.error("Error fetching user emails:", err)
+    }
+  }
+
   const handleVote = async (day: string, hour: string) => {
     if (!user) {
       setError("You must be logged in to vote")
@@ -129,9 +158,7 @@ export default function WeeklySchedule({ pollId }: WeeklyScheduleProps) {
           return updatedVotes
         })
       } else {
-        const { error } = await supabase
-          .from("SchedulePollVote")
-          .insert({ pollID: pollId, day, hour, userID: user.id })
+        const { error } = await supabase.from("SchedulePollVote").insert({ pollID: pollId, day, hour, userID: user.id })
 
         if (error) {
           console.error("Error adding vote:", error)
@@ -170,14 +197,52 @@ export default function WeeklySchedule({ pollId }: WeeklyScheduleProps) {
     )
   }, [votes])
 
+  const uniqueVotersCount = useMemo(() => {
+    const uniqueVoters = new Set()
+    Object.values(votes).forEach((voteData) => {
+      voteData.userVotes.forEach((userId) => uniqueVoters.add(userId))
+    })
+    return uniqueVoters.size
+  }, [votes])
+
+  const uniqueVotersEmails = useMemo(() => {
+    const uniqueVoters = new Set<string>()
+    Object.values(votes).forEach((voteData) => {
+      voteData.userVotes.forEach((userId) => {
+        const email = userEmails[userId]
+        if (email) uniqueVoters.add(email)
+      })
+    })
+    return Array.from(uniqueVoters).join(", ")
+  }, [votes, userEmails])
+
+  const handlePollUpdated = () => {
+    fetchPollData()
+  }
+
   if (error) {
     return <div className="text-red-500">{error}</div>
   }
 
   return (
-    <div>
+    <div className="relative">
       <h2 className="text-2xl font-bold mb-2">{pollName}</h2>
       {pollDescription && <p className="text-gray-600 mb-4">{pollDescription}</p>}
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <p className="text-sm text-gray-500 mb-4 cursor-help">Number of unique votes: {uniqueVotersCount}</p>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>Voters: {uniqueVotersEmails}</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+      {isOwner && (
+        <Button variant="ghost" size="sm" className="absolute top-0 right-0" onClick={() => setIsSettingsOpen(true)}>
+          <Settings className="h-4 w-4" />
+        </Button>
+      )}
       <div className="overflow-x-auto">
         <div className="flex min-w-max">
           {pollDays.map((day, index) => (
@@ -190,10 +255,20 @@ export default function WeeklySchedule({ pollId }: WeeklyScheduleProps) {
               userId={user?.id || ""}
               isLastDay={index === pollDays.length - 1}
               topThreeVotes={topThreeVotes}
+              userEmails={userEmails}
             />
           ))}
         </div>
       </div>
+      <PollSettings
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        pollId={pollId}
+        pollType="schedule"
+        currentStatus={pollStatus}
+        onPollUpdated={handlePollUpdated}
+        onPollDeleted={onPollDeleted}
+      />
     </div>
   )
 }

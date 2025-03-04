@@ -1,13 +1,18 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { createSupabaseClient } from "../utils/supabase"
 import { useAuth } from "./auth-provider"
 import CalendarView from "./calendar-view"
 import { format, parseISO } from "date-fns"
+import { Settings } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import PollSettings from "./poll-settings"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 interface CalendarPollProps {
   pollId: string
+  onPollDeleted: () => void
 }
 
 interface VoteData {
@@ -15,20 +20,25 @@ interface VoteData {
   totalVotes: number
 }
 
-export default function CalendarPoll({ pollId }: CalendarPollProps) {
+export default function CalendarPoll({ pollId, onPollDeleted }: CalendarPollProps) {
   const [pollName, setPollName] = useState<string>("")
   const [pollDescription, setPollDescription] = useState<string>("")
   const [startDate, setStartDate] = useState<Date>(new Date())
   const [endDate, setEndDate] = useState<Date>(new Date())
   const [votes, setVotes] = useState<Record<string, VoteData>>({})
   const [error, setError] = useState<string | null>(null)
+  const [isOwner, setIsOwner] = useState(false)
+  const [pollStatus, setPollStatus] = useState<string>("Open")
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [userEmails, setUserEmails] = useState<Record<string, string>>({})
   const { user } = useAuth()
 
   useEffect(() => {
     if (user) {
       fetchPollData()
+      fetchUserEmails()
     }
-  }, [user]) // Removed unnecessary pollId dependency
+  }, [user])
 
   const fetchPollData = async () => {
     setError(null)
@@ -39,7 +49,7 @@ export default function CalendarPoll({ pollId }: CalendarPollProps) {
 
       const { data: pollData, error: pollError } = await supabase
         .from("CalendarPoll")
-        .select("name, description, startDate, endDate")
+        .select("name, description, startDate, endDate, ownerUser, status")
         .eq("id", pollId)
         .single()
 
@@ -54,6 +64,8 @@ export default function CalendarPoll({ pollId }: CalendarPollProps) {
       setPollDescription(pollData.description || "")
       setStartDate(parseISO(pollData.startDate))
       setEndDate(parseISO(pollData.endDate))
+      setIsOwner(pollData.ownerUser === user.id)
+      setPollStatus(pollData.status)
 
       // Fetch votes
       const { data: voteData, error: voteError } = await supabase
@@ -83,6 +95,23 @@ export default function CalendarPoll({ pollId }: CalendarPollProps) {
     } catch (err) {
       console.error("Unexpected error:", err)
       setError("An unexpected error occurred. Please check the console for more details.")
+    }
+  }
+
+  const fetchUserEmails = async () => {
+    try {
+      const supabase = createSupabaseClient()
+      const { data, error } = await supabase.from("PublicUserProfile").select("uid, email")
+
+      if (error) throw error
+
+      const emailMap: Record<string, string> = {}
+      data.forEach((user) => {
+        emailMap[user.uid] = user.email
+      })
+      setUserEmails(emailMap)
+    } catch (err) {
+      console.error("Error fetching user emails:", err)
     }
   }
 
@@ -149,15 +178,69 @@ export default function CalendarPoll({ pollId }: CalendarPollProps) {
     }
   }
 
+  const handlePollUpdated = () => {
+    fetchPollData()
+  }
+
+  const uniqueVotersCount = useMemo(() => {
+    const uniqueVoters = new Set()
+    Object.values(votes).forEach((voteData) => {
+      voteData.userVotes.forEach((userId) => uniqueVoters.add(userId))
+    })
+    return uniqueVoters.size
+  }, [votes])
+
+  const uniqueVotersEmails = useMemo(() => {
+    const uniqueVoters = new Set<string>()
+    Object.values(votes).forEach((voteData) => {
+      voteData.userVotes.forEach((userId) => {
+        const email = userEmails[userId]
+        if (email) uniqueVoters.add(email)
+      })
+    })
+    return Array.from(uniqueVoters).join(", ")
+  }, [votes, userEmails])
+
   if (error) {
     return <div className="text-red-500">{error}</div>
   }
 
   return (
-    <div>
+    <div className="relative">
       <h2 className="text-2xl font-bold mb-2">{pollName}</h2>
       {pollDescription && <p className="text-gray-600 mb-4">{pollDescription}</p>}
-      <CalendarView startDate={startDate} endDate={endDate} votes={votes} onVote={handleVote} userId={user?.id || ""} />
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <p className="text-sm text-gray-500 mb-4 cursor-help">Number of unique votes: {uniqueVotersCount}</p>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>Voters: {uniqueVotersEmails}</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+      {isOwner && (
+        <Button variant="ghost" size="sm" className="absolute top-0 right-0" onClick={() => setIsSettingsOpen(true)}>
+          <Settings className="h-4 w-4" />
+        </Button>
+      )}
+      <CalendarView
+        startDate={startDate}
+        endDate={endDate}
+        votes={votes}
+        onVote={handleVote}
+        userId={user?.id || ""}
+        userEmails={userEmails}
+      />
+      <PollSettings
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        pollId={pollId}
+        pollType="calendar"
+        currentStatus={pollStatus}
+        onPollUpdated={handlePollUpdated}
+        onPollDeleted={onPollDeleted}
+      />
     </div>
   )
 }

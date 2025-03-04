@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useCallback } from "react"
 import { useAuth } from "../components/auth-provider"
 import PollSelector from "../components/poll-selector"
 import WeeklySchedule from "../components/weekly-schedule"
@@ -9,10 +9,19 @@ import CalendarPoll from "../components/calendar-poll"
 import { Button } from "@/components/ui/button"
 import CreatePollModal from "../components/create-poll-modal"
 
+interface Poll {
+  id: string
+  name: string
+  description?: string
+  type: "schedule" | "calendar"
+}
+
 export default function SchedulePoolingPage() {
   const [selectedPoll, setSelectedPoll] = useState<{ id: string; type: "schedule" | "calendar" } | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [pollType, setPollType] = useState<"schedule" | "calendar">("schedule")
+  const [refreshTrigger, setRefreshTrigger] = useState(0)
+  const [availablePolls, setAvailablePolls] = useState<Poll[]>([])
   const { user } = useAuth()
 
   const handleSelectPoll = (pollId: string, pollType: "schedule" | "calendar") => {
@@ -24,10 +33,19 @@ export default function SchedulePoolingPage() {
     setIsModalOpen(true)
   }
 
-  const handlePollCreated = () => {
+  const handlePollCreated = (newPoll: Poll) => {
     setIsModalOpen(false)
-    // Refresh the poll list
-    // You might want to implement a function to refresh the poll list in PollSelector
+    setRefreshTrigger((prev) => prev + 1)
+    setSelectedPoll({ id: newPoll.id, type: newPoll.type })
+  }
+
+  const handlePollDeleted = useCallback(() => {
+    setRefreshTrigger((prev) => prev + 1)
+    setSelectedPoll(null)
+  }, [])
+
+  const handlePollsLoaded = (polls: Poll[]) => {
+    setAvailablePolls(polls)
   }
 
   if (!user) {
@@ -57,14 +75,18 @@ export default function SchedulePoolingPage() {
         <Button onClick={() => handleCreatePoll("calendar")}>Create Calendar Poll</Button>
       </div>
       <div className="mb-6">
-        <PollSelector onSelectPoll={handleSelectPoll} />
+        <PollSelector
+          onSelectPoll={handleSelectPoll}
+          refreshTrigger={refreshTrigger}
+          onPollsLoaded={handlePollsLoaded}
+        />
       </div>
       {selectedPoll && (
         <div className="bg-white shadow-md rounded-lg overflow-hidden mt-6 p-4">
           {selectedPoll.type === "schedule" ? (
-            <WeeklySchedule key={selectedPoll.id} pollId={selectedPoll.id} />
+            <WeeklySchedule key={selectedPoll.id} pollId={selectedPoll.id} onPollDeleted={handlePollDeleted} />
           ) : (
-            <CalendarPoll key={selectedPoll.id} pollId={selectedPoll.id} />
+            <CalendarPoll key={selectedPoll.id} pollId={selectedPoll.id} onPollDeleted={handlePollDeleted} />
           )}
         </div>
       )}

@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label"
 
 interface CreatePollProps {
   pollType: "schedule" | "calendar"
-  onPollCreated: () => void
+  onPollCreated: (newPoll: { id: string; name: string; type: "schedule" | "calendar" }) => void
 }
 
 const daysOfWeek = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
@@ -89,7 +89,7 @@ export default function CreatePoll({ pollType, onPollCreated }: CreatePollProps)
         setStartDate("")
         setEndDate("")
         setSelectedDays([])
-        onPollCreated()
+        onPollCreated({ id: data[0].id, name: data[0].name, type: pollType })
       }
     } catch (err) {
       console.error("Unexpected error:", err)
